@@ -239,7 +239,6 @@ class Classifier:
             output_bias = tf.keras.initializers.Constant(output_bias)
 
         base_model = self._define_base_model()
-        base_model.trainable = False
 
         if self.fine_tune > 0:
             # Fine-tune from this layer onwards
@@ -306,8 +305,8 @@ class Classifier:
         x = tf.keras.layers.GlobalAveragePooling2D()(x)
         if (self.custom_classifier is not None):
             for num in self.custom_classifier:
-                x = tf.keras.layers.Dense(num, activation='relu')(x)
-                #x = tf.keras.layers.Dense(num, activation='sigmoid')(x)
+                #x = tf.keras.layers.Dense(num, activation='relu')(x)
+                x = tf.keras.layers.Dense(num, activation='sigmoid')(x)
                 
 
         x = tf.keras.layers.Dense(len(self.class_names),
