@@ -20,15 +20,28 @@ checkpoint_filepath = f'{base_network}_test98'
 idx = base_test_idx + 0
 save_checkpoint_filepath = f'{base_network}_test{idx}'
 with open(f'test{idx}.log', 'w') as custom_nohup:
-    args = ['nohup', 'python', 'classifier.py',
-        't',
-        f'{checkpoint_filepath}',
-        f'--savecheckpoint', f'{save_checkpoint_filepath}',
-        f'--dataaug',
-        '--val_split', f'{val_split}',
-        '--customclassifier', '1080,540',
-        '--numepochs', '100',
-        ]
+    if os.name == "nt":
+        args = ['python', 'classifier.py',
+            't',
+            f'{checkpoint_filepath}',
+            f'--savecheckpoint', f'{save_checkpoint_filepath}',
+            f'--dataaug',
+            '--val_split', f'{val_split}',
+            '--customclassifier', '1080,540',
+            '--numepochs', '100',
+            ]
+    else:
+        args = ['nohup', 'python', 'classifier.py',
+            't',
+            f'{checkpoint_filepath}',
+            f'--savecheckpoint', f'{save_checkpoint_filepath}',
+            f'--dataaug',
+            '--val_split', f'{val_split}',
+            '--customclassifier', '1080,540',
+            '--numepochs', '100',
+            ]
+
+    
     p = subprocess.Popen(args, stdout=custom_nohup, stderr=custom_nohup)
     p.wait()
 
