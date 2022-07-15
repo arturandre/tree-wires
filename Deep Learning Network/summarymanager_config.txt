@@ -10,7 +10,7 @@
 # if summan.smr and summan_1.smr already exists
 # in the pictures folder then summan_2.smr will be
 # created.
-summary_filename_no_ext = 'summan'
+summary_filename_no_ext = 'summan3220unk'
 
 # The extension to be used in the summary file.
 # Notice it must contain the dot

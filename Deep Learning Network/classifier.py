@@ -14,8 +14,12 @@
 import tensorflow as tf
 import pandas as pd
 
+# https://github.com/tensorflow/tensorflow/issues/24496#issuecomment-620002422
+# tf.config.experimental.set_memory_growth(tf.config.list_physical_devices('GPU')[0], True)
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 import imageio
+# import matplotlib.pyplot as plt
 import numpy as np
 import os
 import time
@@ -29,9 +33,25 @@ from sklearn.model_selection import train_test_split
 
 from summan import SummaryManager
 summary_manager = SummaryManager()
+#import model as tw_model
 
 import argparse
 from tqdm import tqdm
+
+# https://github.com/tensorflow/tensorflow/issues/24496#issuecomment-464909727
+# from tensorflow.compat.v1 import ConfigProto
+# from tensorflow.compat.v1 import InteractiveSession
+
+# config = ConfigProto()
+# config.gpu_options.allow_growth = True
+# session = InteractiveSession(config=config)
+
+# # https://github.com/tensorflow/tensorflow/issues/24496#issuecomment-480549043
+# # config.mutable_gpu_options.set_per_process_gpu_memory_fraction(fraction);
+
+# Remove the logging messages of the resampler
+# Ref: https://github.com/tensorflow/tensorflow/issues/28597#issuecomment-494995700
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 class Classifier:
     def __init__(self,
@@ -44,8 +64,7 @@ class Classifier:
                  training_mode=True,
                  fine_tune=0,
                  use_dataaug=False,
-                 custom_classifier=None,
-                 ssdliteclassifier=False):
+                 custom_classifier=None):
         if not summary_manager.is_summary_loaded():
             raise Exception("Summary not loaded yet!")
 
@@ -62,7 +81,6 @@ class Classifier:
         self.fine_tune = fine_tune
         self.use_dataaug = use_dataaug
         self.custom_classifier = custom_classifier
-        self.ssdliteclassifier = ssdliteclassifier
 
         self.model_ready = False
         
@@ -91,6 +109,24 @@ class Classifier:
                 self.dataframe_labeled_samples[self.class_names].astype('int').values)
         self.dataframe_labeled_samples.loc[:, 'categorical_labels'] = aux
 
+        # Helps to keep a balance between POA and SP images
+
+        # if training_mode:
+        #     sp_slice = self.dataframe_labeled_samples[
+        #         self.dataframe_labeled_samples['lat']\
+        #             .astype('float')\
+        #             .astype('int') == -23
+        #     ]
+        #     poa_slice = self.dataframe_labeled_samples[
+        #         self.dataframe_labeled_samples['lat']\
+        #             .astype('float')\
+        #             .astype('int') == -30
+        #     ]
+        #     sp_samples = np.random.choice(sp_slice.index.values, len(poa_slice), replace=False)
+        #     sp_slice = self.dataframe_labeled_samples.loc[sp_samples]
+        #     self.dataframe_labeled_samples = pd.concat((sp_slice, poa_slice))
+        #     # Training mode
+
         self.dataset_size = len(self.dataframe_labeled_samples)
 
         # samples_per_class is a dict whose key is a categorical label (i.e. from 0 up to 5).
@@ -103,6 +139,7 @@ class Classifier:
         # of the key.
         self.samples_per_class = {}
         for class_label in self.classes_categorical:
+            #self.dataframe_labeled_samples.loc[:, class_label] = \
             self.samples_per_class[class_label] = \
                 self.dataframe_labeled_samples[
                 self.dataframe_labeled_samples\
@@ -239,72 +276,49 @@ class Classifier:
             output_bias = tf.keras.initializers.Constant(output_bias)
 
         base_model = self._define_base_model()
+        base_model.trainable = False
 
         if self.fine_tune > 0:
             # Fine-tune from this layer onwards
             fine_tune_at = self.fine_tune
             # Unfreeze all the layers before the `fine_tune_at` layer
-            for layer in base_model.layers[-fine_tune_at:]:
+            for layer in base_model.layers[fine_tune_at:]:
                 layer.trainable = True
+            
+            
+
+
+        
+
+        #global_average_layer = tf.keras.layers.GlobalAveragePooling2D()
+        #global_average_layer = global_average_layer(base_model.output)
+        #prediction_layer = tf.keras.layers.Dense(len(self.class_names),
+        #                                         bias_initializer=output_bias,
+        #                                         activation='sigmoid')
+        #prediction_layer(global_average_layer)
+        #dl_model = prediction_layer(dl_model)
 
         if self.use_dataaug:
             data_augmentation = tf.keras.Sequential([
                     tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
                     tf.keras.layers.experimental.preprocessing.RandomRotation(0.2)
+#                    base_model
                 ])
             x = tf.keras.Input(shape=(None, None, 3))
             x = data_augmentation(x)
             x = base_model(x, training=False)
         else:
             x = base_model.output
-
-        if (self.ssdliteclassifier):
-            #conv6
-            x = tf.keras.layers.SeparableConv2D(
-                filters=1024,
-                kernel_size=(3, 3),
-                padding='same',
-                activation=None)(x)
-            x = tf.keras.activations.relu(x, max_value=6.0)
-            #conv7
-            x = tf.keras.layers.SeparableConv2D(
-                filters=1024,
-                kernel_size=(3, 3),
-                padding='same',
-                activation=None)(x)
-            x = tf.keras.activations.relu(x, max_value=6.0)
-            #conv8
-            x = tf.keras.layers.SeparableConv2D(
-                filters=512,
-                kernel_size=(3, 3),
-                padding='same',
-                activation=None)(x)
-            x = tf.keras.activations.relu(x, max_value=6.0)
-            #conv9
-            x = tf.keras.layers.SeparableConv2D(
-                filters=256,
-                kernel_size=(3, 3),
-                padding='same',
-                activation=None)(x)
-            x = tf.keras.activations.relu(x, max_value=6.0)
-            #conv10
-            x = tf.keras.layers.SeparableConv2D(
-                filters=256,
-                kernel_size=(3, 3),
-                padding='same',
-                activation=None)(x)
-            x = tf.keras.activations.relu(x, max_value=6.0)
-            #conv11
-            x = tf.keras.layers.SeparableConv2D(
-                filters=128,
-                kernel_size=(3, 3),
-                padding='same',
-                activation=None)(x)
-            x = tf.keras.activations.relu(x, max_value=6.0)
             
         x = tf.keras.layers.GlobalAveragePooling2D()(x)
         if (self.custom_classifier is not None):
             for num in self.custom_classifier:
+                # Até o teste 97 foi usada ativação relu aqui
+                # vamos testar a função sigmoid porque o gradcam++ mostra
+                # que muitas imagens não possuem ativações usando-se o relu, ao
+                # passo que as mesmas redes (com os mesmos pesos inclusive)
+                # possuem ativações coerentes ao se usar a função sigmoid na cabeça
+                # de classificação.
                 #x = tf.keras.layers.Dense(num, activation='relu')(x)
                 x = tf.keras.layers.Dense(num, activation='sigmoid')(x)
                 
@@ -432,11 +446,12 @@ class Classifier:
         images_val = np.array([
             self.image_preprocessor(
                 imageio.imread(f)) for f in tqdm(images_val)])
+        #images_val = np.array([self.image_preprocessor(f) for f in tqdm(images_val)])
         images_val = tf.data.Dataset.from_tensor_slices(images_val)
-
+        #images_val = tf.data.Dataset.list_files(images_val)
+        #images_val = images_val.map(tf.io.read_file)
         print(f"Loading validation labels into tf tensor")
         labels_val = tf.data.Dataset.from_tensor_slices(labels_val)
-
         print(f"Creating validation zipped dataset with images and labels")
         dataset_val = tf.data.Dataset.zip((images_val, labels_val))
 
@@ -460,6 +475,7 @@ class Classifier:
 
         fitParams = {
             'epochs': num_epochs,
+            #'epochs': 1,
             'callbacks':[self.model_checkpoint_callback]
             }
         
@@ -471,6 +487,8 @@ class Classifier:
                 batch_size=batch_size)
             fitParams['validation_data'] = balanced_ds_val
         
+        
+        #print(f"Starting fit - epochs {currentEpoch+1}/{num_epochs}")
         print(f"Starting fit")
         history = self.dl_model.fit(
             balanced_ds,
@@ -494,7 +512,7 @@ class Classifier:
         alternative_checkpoint_filepath = self.check_checkpoint_variable(alternative_checkpoint_filepath)
         print(f"Cleaning evaluation file {outputfile}")
         open(outputfile, 'w').close()
-
+        #for _ in range(repetitions):
         for _ in range(2):
             dataset, _ = self.create_tf_datasets()
             balanced_ds = self.balanced_shuffled_batches(dataset,
@@ -530,10 +548,12 @@ class Classifier:
         batches = self.get_image_paths_batch_linear(batch_size)
         predictions_list = []
         image_paths = []
-
+        #print(len(batches))
         with tf.device('/gpu:0'):
             for batch in tqdm(batches):
                 samples = []
+                # The labels can be consulted in the labelgui.smr file
+                # labels = []
                 for image_name in batch[0]:
                     image_path = os.path.join(os.path.dirname(
                         self.summary_manager.current_labelgui_summary_filepath),
@@ -544,7 +564,10 @@ class Classifier:
                 predictions[predictions > 0.5] = 1.
                 predictions[predictions <= 0.5] = 0.
                 predictions_list.append(predictions.astype('int'))
+                #predictions_list.append(predictions)
                 image_paths.append(batch[0])
+
+            # break # TEST
         return image_paths, predictions_list[:]
 
 
@@ -605,7 +628,8 @@ if __name__ == "__main__":
                         (
                             f'Uses the defined test folder'
                         ),
-                        action='store_true')
+                        action='store_true',
+                        default=False)
     parser.add_argument('--val_split',
                         type=float,
                         help=
@@ -632,27 +656,14 @@ if __name__ == "__main__":
                             f' After them there will always be a final dense layer '
                             f' with as many neurons as classes in the dataset. '
                         ))
-    parser.add_argument('--ssdliteclassifier',
-                        help=
-                        (
-                            f'Uses a classification head '
-                            f'based on the SSDLite as presented at '
-                            f'the paper \'SSD: Single Shot MultiBox Detector\'. '
-                            f'The difference is that the Conv layers are '
-                            f'replaced by SeparableConv ones as per the '
-                            f'paper '
-                            f'\'MobileNetV2: Inverted Residuals and Linear Bottlenecks\'.'
-                            f'If used with the customclassifier flag then the '
-                            f'layers from latter will be ahead (the final) ones.'
-                        ),
-                        action='store_true')
     parser.add_argument('--dataaug',
                         help=
                         (
                             f'Uses the hard-coded preprocessing '
                             f'data augmentation algorithm.'
                         ),
-                        action='store_true')
+                        action='store_true',
+                        default=False)
     parser.add_argument('--finetune',
                         type=int,
                         help=
@@ -673,7 +684,6 @@ if __name__ == "__main__":
     customclassifier = args.customclassifier
     use_dataaug = args.dataaug
     fine_tune = args.finetune
-    ssdliteclassifier = args.ssdliteclassifier
     numepochs = int(args.numepochs)
 
     print(f'Validation split argument: {arg_val_split}')
@@ -690,20 +700,30 @@ if __name__ == "__main__":
     # Used to automatically set the configuration
     import socket
     print(socket.gethostname())
+    #settings = 'deepten'
+    settings = socket.gethostname()
 
-    base_network = 'mobilenetv2'
+    #if settings == 'deepten':
+    base_network = 'mobilenetv2'  # deepten
+    #checkpoint_filepath = f'{base_network}_test7'  # deepten
     checkpoint_filepath = arg_checkpoint_filepath
     save_checkpoint_filepath = arg_save_checkpoint_filepath
-    batch_size_hc = 8
+    batch_size_hc = 8  # mobilenetv2 (deepten)
+    #elif settings == 'deepnine':
+    #    base_network = 'resnet101v2' # deepnine
+    #    checkpoint_filepath = f'{base_network}_test3'  # deepnine
+    #    batch_size_hc = 20 # Resnet101V2 (deepnine)
 
-    num_epochs_hc = numepochs
-    eval_repetitions = 5
+    num_epochs_hc = numepochs #1000 # Only for training
+    eval_repetitions = 5 # Only for evaluation
 
     print("Executing main")
     print("Loading images folder")
-    train_folder = './Training_Data'
-    test_folder = './Test_Data'
-
+    #train_folder = r'C:\Users\arturao\Documents\projetosdev\INACITY_P\django_website\pictures'
+    #train_folder = '/scratch/arturao/TREES_STUFF/pictures'
+    train_folder = '/scratch/arturao/TREES_STUFF/newtraining_dataset_plus_3k'
+    test_folder = '/scratch/arturao/TREES_STUFF/test_pictures'
+    #test_folder = r'C:\Users\arturao\Documents\projetosdev\INACITY_P\django_website\ignored\test_pictures'
     predictions_report_file = f'predictions_{arg_checkpoint_filepath}.txt'
     evaluation_report_file = f'evaluation_{arg_checkpoint_filepath}.txt'
 
@@ -721,49 +741,55 @@ if __name__ == "__main__":
     # gpus = True
     if gpus:
         try:
+            #gpus_idx = [0, 1, 3]
             gpus_idx = list(range(len(gpus)))
+            #selected_gpus = gpus[:]
             selected_gpus = list(itemgetter(*gpus_idx)(gpus))
             tf.config.experimental.set_visible_devices(selected_gpus, 'GPU')
             for gpu in selected_gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
+            C = Classifier(summary_manager,
+                training_mode = ((mode == "train") or (mode == "t")),
+                checkpoint_filepath=checkpoint_filepath,
+                save_checkpoint_filepath=save_checkpoint_filepath,
+                base_network=base_network,
+                custom_classifier=customclassifier,
+                fine_tune=fine_tune)
+            print("Labels present:")
+            for class_name in C.class_names:
+                print(class_name)
+            mirrored_strategy = tf.distribute.MirroredStrategy() ####### Escopo inicializado
+            with mirrored_strategy.scope():
+                print("Initializing classifier")
+                C.init_network()
+                if (mode == "predict") or (mode == "p"):
+                    #with mirrored_strategy.scope(): ####### Escopo reinicializado
+                    print(f"Initializing prediction with batch size of {batch_size_hc}")
+                    prediction_batches = C.generate_predictions(batch_size_hc, checkpoint_filepath)
+                    with open(predictions_report_file, 'w+') as f:
+                        for batch in zip(prediction_batches[0], prediction_batches[1]):
+                            for sample in zip(batch[0], batch[1]):
+                                aux = sample[1].astype('str')
+                                f.write(f"{sample[0]}, {','.join(aux)}\n")
+                elif (mode == "evaluate") or (mode == "e"):
+                    C.validation_split = 0.0
+                    #with mirrored_strategy.scope(): ####### Escopo reinicializado
+                    C.evaluate_saved_network(batch_size_hc,
+                                            outputfile=evaluation_report_file,
+                                            alternative_checkpoint_filepath=checkpoint_filepath,
+                                            repetitions=eval_repetitions)
+                elif (mode == "train") or (mode == "t"):
+                    # hc - hard-coded
+                    #C.fine_tune = 100
+                    C.validation_split = arg_val_split
+                    C.use_dataaug = use_dataaug
+                    #with mirrored_strategy.scope(): ####### Escopo reinicializado
+                    print(f"Initializing training with {num_epochs_hc} epochs and batch size of {batch_size_hc}")
+                    C.train_network(
+                        num_epochs=num_epochs_hc,
+                        shuffle_buffer=100,
+                        batch_size=batch_size_hc)
         except RuntimeError as e:
             # Visible devices must be set before GPUs have been initialized
             print(e)
-    C = Classifier(summary_manager,
-        training_mode = ((mode == "train") or (mode == "t")),
-        checkpoint_filepath=checkpoint_filepath,
-        save_checkpoint_filepath=save_checkpoint_filepath,
-        base_network=base_network,
-        custom_classifier=customclassifier,
-        ssdliteclassifier=ssdliteclassifier,
-        fine_tune=fine_tune)
-    print("Labels present:")
-    for class_name in C.class_names:
-        print(class_name)
-        
-    print("Initializing classifier")
-    C.init_network()
-    if (mode == "predict") or (mode == "p"):
-        print(f"Initializing prediction with batch size of {batch_size_hc}")
-        prediction_batches = C.generate_predictions(batch_size_hc, checkpoint_filepath)
-        with open(predictions_report_file, 'w+') as f:
-            for batch in zip(prediction_batches[0], prediction_batches[1]):
-                for sample in zip(batch[0], batch[1]):
-                    aux = sample[1].astype('str')
-                    f.write(f"{sample[0]}, {','.join(aux)}\n")
-    elif (mode == "evaluate") or (mode == "e"):
-        C.validation_split = 0.0
-        C.evaluate_saved_network(batch_size_hc,
-                                outputfile=evaluation_report_file,
-                                alternative_checkpoint_filepath=checkpoint_filepath,
-                                repetitions=eval_repetitions)
-    elif (mode == "train") or (mode == "t"):
-        C.validation_split = arg_val_split
-        C.use_dataaug = use_dataaug
-        print(f"Initializing training with {num_epochs_hc} epochs and batch size of {batch_size_hc}")
-        C.train_network(
-            num_epochs=num_epochs_hc,
-            shuffle_buffer=100,
-            batch_size=batch_size_hc)
-
 
