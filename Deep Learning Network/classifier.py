@@ -719,11 +719,8 @@ if __name__ == "__main__":
 
     print("Executing main")
     print("Loading images folder")
-    #train_folder = r'C:\Users\arturao\Documents\projetosdev\INACITY_P\django_website\pictures'
-    #train_folder = '/scratch/arturao/TREES_STUFF/pictures'
-    train_folder = '/scratch/arturao/TREES_STUFF/newtraining_dataset_plus_3k'
-    test_folder = '/scratch/arturao/TREES_STUFF/test_pictures'
-    #test_folder = r'C:\Users\arturao\Documents\projetosdev\INACITY_P\django_website\ignored\test_pictures'
+    train_folder = '../Training_Data/'
+    test_folder = '../Test_Data/'
     predictions_report_file = f'predictions_{arg_checkpoint_filepath}.txt'
     evaluation_report_file = f'evaluation_{arg_checkpoint_filepath}.txt'
 
