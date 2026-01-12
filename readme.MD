@@ -1,4 +1,4 @@
-# Detecting tree and wire entanglements with deep learning
+# Detecting tree and wire entanglements with deep learning (Python 3.8)
 
 This repository contains code and data for the experiments from the paper *Detecting tree and wire entanglements with deep learning*.
 
