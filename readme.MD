@@ -17,7 +17,7 @@ For convenience we make available the pre-trained model (mobilenetv2_test94) and
 We also make available the training dataset.
 
 To train a new network use the command:
-`python classifier.py t mobilenetv2_test94 --savecheckpoint mobilenetv2_test98 --dataaug --finetune '11' --val_split '0.2' --customclassifier 1080,540 --numepochs 100`
+`python classifier.py t mobilenetv2_test94 --savecheckpoint mobilenetv2_test98 --dataaug --finetune 11 --val_split 0.2 --customclassifier 1080,540 --numepochs 100`
 
 To predict labels for the test dataset:
 
