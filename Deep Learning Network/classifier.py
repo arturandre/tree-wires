@@ -11,6 +11,9 @@
 # Converting dataframe to tensorflow dataset
 # Ref: https://www.tensorflow.org/tutorials/load_data/pandas_dataframe
 
+import os
+os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python' 
+
 import tensorflow as tf
 import pandas as pd
 
@@ -52,6 +55,7 @@ from tqdm import tqdm
 # Remove the logging messages of the resampler
 # Ref: https://github.com/tensorflow/tensorflow/issues/28597#issuecomment-494995700
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
 
 class Classifier:
     def __init__(self,
